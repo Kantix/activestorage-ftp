@@ -3,6 +3,7 @@ require "active_storage_ftp/ex_ftp"
 require "active_storage_ftp/ex_ftptls"
 require "digest/md5"
 require "active_support/core_ext/numeric/bytes"
+require 'net/http'
 
 module ActiveStorage
 
@@ -132,9 +133,10 @@ module ActiveStorage
       [key[0..1], key[2..3]].join("/")
     end
 
+    # Usage of response header Content-MD5 is not safe as it is not always return
     def ensure_integrity_of(key, checksum)
-      response = request_head(key)
-      unless "#{response['Content-MD5']}==" == checksum
+      response = request(key)
+      unless Digest::MD5.base64digest(response.body) == checksum
         delete key
         raise ActiveStorage::IntegrityError
       end
@@ -148,11 +150,11 @@ module ActiveStorage
       ActiveStorage::Current.host
     end
 
-    def request_head(key)
+    def request(key)
       uri = URI(http_url_for(key))
       request = Net::HTTP.new(uri.host, uri.port)
       request.use_ssl = uri.scheme == 'https'
-      request.request_head(uri.path)
+      request.get(uri.path)
     end
 
     def http_url_for(key)
